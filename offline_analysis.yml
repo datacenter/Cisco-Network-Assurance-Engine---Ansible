@@ -1,0 +1,19 @@
+---
+
+- name: playbook testing
+  connection: local
+  gather_facts: false
+  hosts: candid
+
+
+  tasks:
+     - name: create a fabric
+       candid_offline_analysis:
+           host: "{{ host }}"
+           username: "{{ user }}"
+           password: "{{ pass }}"
+           method: start_offline_analysis
+           file_upload_uuid: laskei0293mfno
+           aci_fabric_uuid: alkr0n32074mckei
+           use_ssl: false
+           validate_certs: false

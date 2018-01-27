@@ -21,7 +21,7 @@ import requests
 import json
 import urllib3
 
-from ansible.module_utils.urls import fetch_url
+# from ansible.module_utils.urls import fetch_url
 from ansible.module_utils.basic import AnsibleModule
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -53,33 +53,32 @@ class Fabric(object):
 
         self.base_url = "https://" + self.params['host'] + "/api/v1/"
 
-
     def login(self):
 
         whoami_url = self.base_url + 'whoami'
 
-        resp, wmi_response = fetch_url(module=self.module, url=whoami_url, headers=self.headers, method='GET')
-        if wmi_response['status'] is 200:
+        wmi_response = requests.get(url=whoami_url, headers=self.headers, verify=False)
+        if wmi_response.status_code is 200:
             login_body = {
                 "username": self.params['username'],
                 "password": self.params['password']
             }
-            cookie = resp.headers['Set-Cookie']
+            cookie = wmi_response.headers['Set-Cookie']
             cookie = str(cookie).split(';')[0]
-            self.headers["X-CANDID-LOGIN-OTP"] = resp.headers['X-CANDID-LOGIN-OTP']
+            self.headers["X-CANDID-LOGIN-OTP"] = wmi_response.headers['X-CANDID-LOGIN-OTP']
             self.headers['Cookie'] = cookie
 
             login_url = self.base_url + "login"
-            resp, login_resp = fetch_url(module=self.module, url=login_url, data=json.dumps(login_body), headers=self.headers, method='POST')
-            token = resp.headers['X-CANDID-CSRF-TOKEN']
-            sid = resp.headers['Set-Cookie']
+            login_resp = requests.post(url=login_url, data=json.dumps(login_body), headers=self.headers, verify=False)
+            token = login_resp.headers['X-CANDID-CSRF-TOKEN']
+            sid = login_resp.headers['Set-Cookie']
 
             log_cookie = str(sid).split(';')[0]
             # rest_header = dict()
             self.headers['Cookie'] = log_cookie
             self.headers['X-CANDID-CSRF-TOKEN'] = token
 
-            return login_resp['status']
+            return login_resp.status_code
 
     def create_fabric(self):
         create_url = self.base_url + '/assured-networks/aci-fabric'
@@ -101,7 +100,7 @@ class Fabric(object):
         }
 
         create_resp = requests.post(url=create_url, headers=self.headers, data=json.dumps(config_data), verify=False)
-        resp = json.dumps(create_resp.json())
+        resp = json.dumps(create_resp.json(), indent=4, sort_keys=True)
         resp = json.loads(resp)
 
         self.result['response'] = resp
@@ -109,61 +108,59 @@ class Fabric(object):
 
 
     def update_fabric(self):
-        fabric_url = self.base_url + "assured-networks/aci-fabric"
-        fabrics = requests.get(url=fabric_url, headers=self.headers, verify=False)
-        if fabrics.status_code is 200 or fabrics.status_code is 201:
-            resp = json.dumps(fabrics.json())
-            resp = json.loads(resp)
+        resp = self.get_fabric()
         data_no = len(resp['value']['data'])
         for key in range(0, data_no):
             if resp['value']['data'][key]['unique_name'] == self.params['unique_name']:
                     fabric_id = resp['value']['data'][key]['uuid']
-        update_url = self.base_url + '/api/v1/assured-networks/aci-fabric/' + fabric_id
+        update_url = self.base_url + 'assured-networks/aci-fabric/' + fabric_id
         update_payload = {}
-        print(self.params)
-        # for key, value in self.params.items():
-        #     if self.params[key]:
-        #          update_payload.update(key,value)
-        # print(update_payload)
-        # resp, update_fabric = fetch_url(module=self.module, url=update_url, headers=self.headers, data=json.dumps(update_payload))
-        # update_fabric = json.dumps(update_fabric.json(), indent=4, sort_keys=True)
-        # update_fabric = json.loads(update_fabric)
-        #
-        # self.result['response'] = update_fabric['msg']
-        # self.result['status'] = update_fabric['status']
+        for key, value in self.params.items():
+            if self.params[key]:
+               update_payload[key] = value
+        update_fabric = requests.put(url=update_url, headers=self.headers, data=json.dumps(update_payload), verify=False)
+        resp = json.dumps(update_fabric.json(), indent=4, sort_keys=True)
+        resp = json.loads(resp)
+
+        self.result['response'] = resp
+        self.result['status'] = update_fabric.status_code
 
     def retrieve_fabric(self):
-        fabric_url = self.base_url + "assured-networks/aci-fabric"
-        fabrics = requests.get(url=fabric_url, headers=self.headers, verify=False)
-        if fabrics.status_code is 200 or fabrics.status_code is 201:
-            resp = json.dumps(fabrics.json())
-            resp = json.loads(resp)
+        resp = self.get_fabric()
         data_no = len(resp['value']['data'])
         for key in range(0, data_no):
              if resp['value']['data'][key]['unique_name'] == self.params['unique_name']:
                 fabric_id = resp['value']['data'][key]['uuid']
         retrieve_url = self.base_url + 'assured-networks/aci-fabric/' + fabric_id
         retrieve_fabric_data = requests.get(url=retrieve_url, headers=self.headers, verify=False)
-        retrieve_fabric = json.dumps(retrieve_fabric_data.json(), indent=4, sort_keys=True)
-        retrieve_fabric = json.loads(retrieve_fabric)
+        resp = json.dumps(retrieve_fabric_data.json(), indent=4, sort_keys=True)
+        resp = json.loads(resp)
 
-        self.result['response'] = retrieve_fabric
-        self.result['status'] = retrieve_fabric['status']
+        self.result['response'] = resp
+        self.result['status'] = retrieve_fabric_data.status_code
 
     def start_stop_analysis(self, method):
-        fabric_url = self.base_url + "assured-networks/aci-fabric"
-        fabrics = requests.get(url=fabric_url, headers=self.headers, verify=False)
-        if fabrics.status_code is 200 or fabrics.status_code is 201:
-            resp = json.dumps(fabrics.json())
-            resp = json.loads(resp)
+        resp = self.get_fabric()
         data_no = len(resp['value']['data'])
         for key in range(0, data_no):
             if resp['value']['data'][key]['unique_name'] == self.params['unique_name']:
                 fabric_id = resp['value']['data'][key]['uuid']
         analysis_url = self.base_url + 'assured-networks/aci-fabric/{0}/{1}'.format(fabric_id, method)
-        resp, analysis_response = fetch_url(module=self.module, url=analysis_url, headers=self.headers, method='POST')
-        self.result['response'] = analysis_response
-        self.result['status'] = analysis_response['status']
+        analysis_response = requests.post(url=analysis_url, headers=self.headers, verify=False)
+        resp = json.dumps(analysis_response.json(), indent=4, sort_keys=True)
+        resp = json.loads(resp)
+
+        self.result['response'] = resp
+        self.result['status'] = analysis_response.status_code
+
+    def get_fabric(self):
+        fabric_url = self.base_url + "assured-networks/aci-fabric"
+        fabrics = requests.get(url=fabric_url, headers=self.headers, verify=False)
+        if fabrics.status_code is 200 or fabrics.status_code is 201:
+            resp = json.dumps(fabrics.json())
+            resp = json.loads(resp)
+
+        return resp
 
 def main():
     argument_spec = candid_argument_spec()
@@ -171,9 +168,9 @@ def main():
         host=dict(required=True),
         username=dict(type='str', required=True),
         password=dict(type='str', required=True, no_log=True),
-        method=dict(type='str', choices=['create', 'update', 'retrieve', 'start-analysis', 'stop-analysis'],
+        method=dict(type='str', choices=['create_fabric', 'update_fabric', 'retrieve_fabric', 'start-analysis', 'stop-analysis'],
                     aliases=['action'], removed_in_version='2.6', required=True),
-        system_object=dict(type='bool'),
+        system_object=dict(type='bool', default='False'),
         tags=dict(type='list'),
         display_name=dict(type='str'),
         interval=dict(type='int'),
@@ -212,29 +209,20 @@ def main():
     resp = candid.login()
 
     if resp is 200 or resp is 201:
-        if method == 'create':
-            try:
-                candid.create_fabric()
-
-            except Exception:
-                pass
-        elif method == 'update':
-            try:
-                candid.update_fabric()
-            except Exception:
-                pass
-        elif method == 'retrieve':
-            try:
-                candid.retrieve_fabric()
-            except Exception:
-                pass
-        elif method == 'start-analysis' or method == 'stop-analysis':
-            try:
-                candid.start_stop_analysis(method)
-            except Exception:
+        try:
+            if method == 'create_fabric':
+                    candid.create_fabric()
+            elif method == 'update_fabric':
+                    candid.update_fabric()
+            elif method == 'retrieve_fabric':
+                    candid.retrieve_fabric()
+            elif method == 'start-analysis' or method == 'stop-analysis':
+                    candid.start_stop_analysis(method)
+        except Exception:
                 pass
 
     module.exit_json(**candid.result)
+
 
 if __name__ == '__main__':
     main()

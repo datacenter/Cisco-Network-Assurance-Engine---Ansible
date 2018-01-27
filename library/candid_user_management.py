@@ -21,7 +21,7 @@ import requests
 import json
 import urllib3
 
-from ansible.module_utils.urls import fetch_url
+#from ansible.module_utils.urls import fetch_url
 from ansible.module_utils.basic import AnsibleModule
 
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -51,33 +51,32 @@ class User(object):
 
         self.base_url = "https://" + self.params['host'] + "/api/v1/"
 
-
     def login(self):
 
         whoami_url = self.base_url + 'whoami'
 
-        resp, wmi_response = fetch_url(module=self.module, url=whoami_url, headers=self.headers, method='GET')
-        if wmi_response['status'] is 200:
+        wmi_response = requests.get(url=whoami_url, headers=self.headers, verify=False)
+        if wmi_response.status_code is 200:
             login_body = {
                 "username": self.params['username'],
                 "password": self.params['password']
             }
-            cookie = resp.headers['Set-Cookie']
+            cookie = wmi_response.headers['Set-Cookie']
             cookie = str(cookie).split(';')[0]
-            self.headers["X-CANDID-LOGIN-OTP"] = resp.headers['X-CANDID-LOGIN-OTP']
+            self.headers["X-CANDID-LOGIN-OTP"] = wmi_response.headers['X-CANDID-LOGIN-OTP']
             self.headers['Cookie'] = cookie
 
             login_url = self.base_url + "login"
-            resp, login_resp = fetch_url(module=self.module, url=login_url, data=json.dumps(login_body), headers=self.headers, method='POST')
-            token = resp.headers['X-CANDID-CSRF-TOKEN']
-            sid = resp.headers['Set-Cookie']
+            login_resp = requests.post(url=login_url, data=json.dumps(login_body), headers=self.headers, verify=False)
+            token = login_resp.headers['X-CANDID-CSRF-TOKEN']
+            sid = login_resp.headers['Set-Cookie']
 
             log_cookie = str(sid).split(';')[0]
             # rest_header = dict()
             self.headers['Cookie'] = log_cookie
             self.headers['X-CANDID-CSRF-TOKEN'] = token
 
-            return login_resp['status']
+            return login_resp.status_code
 
     def create_user(self):
         create_url = self.base_url + '/users'
@@ -92,7 +91,7 @@ class User(object):
         create_resp = requests.post(url=create_url, headers=self.headers,
                                       data=json.dumps(config_data), verify=False)
 
-        resp = json.dumps(create_resp.json())
+        resp = json.dumps(create_resp.json(), indent=4, sort_keys=True)
         resp = json.loads(resp)
 
         self.result['response'] = resp
@@ -105,8 +104,16 @@ class User(object):
             if resp['value']['data'][key]['username'] == self.params['user']:
                 fabric_id = resp['value']['data'][key]['uuid']
         update_url = self.base_url + 'users/{0}'.format(fabric_id)
-        update_payload={
-        }
+        update_payload = {'uuid': fabric_id}
+        for key, value in self.params.items():
+            if self.params[key]:
+               update_payload[key] = value
+        update_resp = requests.put(url=update_url, headers=self.headers, data=json.dumps(update_payload), verify=False)
+        resp = json.dumps(update_resp.json(), indent=4, sort_keys=True)
+        resp = json.loads(resp)
+
+        self.result['response'] = resp
+        self.result['status'] = update_resp.status_code
 
     def get_user_data(self):
         resp = self.get_all_user_data()
@@ -116,7 +123,7 @@ class User(object):
                 fabric_id = resp['value']['data'][key]['uuid']
         get_user_data_url = self.base_url + 'users/{0}'.format(fabric_id)
         user_data = requests.get(url=get_user_data_url, headers=self.headers, verify=False)
-        resp = json.dumps(user_data.json())
+        resp = json.dumps(user_data.json(), indent=4, sort_keys=True)
         resp = json.loads(resp)
 
         self.result['response'] = resp
@@ -132,7 +139,7 @@ class User(object):
         delete_user_url = self.base_url + 'users/{0}'.format(fabric_id)
         delete_user = requests.delete(url=delete_user_url, headers=self.headers, verify=False)
 
-        resp = json.dumps(delete_user.json())
+        resp = json.dumps(delete_user.json(), indent=4, sort_keys=True)
         resp = json.loads(resp)
 
         self.result['response'] = resp
@@ -141,7 +148,7 @@ class User(object):
     def get_all_user_data(self):
         user_url = self.base_url + 'users'
         all_user_data = requests.get(url=user_url, headers=self.headers, verify=False)
-        resp = json.dumps(all_user_data.json())
+        resp = json.dumps(all_user_data.json(), indent=4, sort_keys=True)
         resp = json.loads(resp)
 
         self.result['response'] = resp
@@ -159,7 +166,7 @@ def main():
         password=dict(type='str', required=True, no_log=True),
         method=dict(type='str', choices=['create_user', 'update_user', 'delete_user', 'user_info', 'all_user_data'],
                     aliases=['action'], required=True),
-        system_object=dict(type='bool'),
+        system_object=dict(type='bool', default='False'),
         email=dict(type='str'),
         user=dict(type='str'),
         user_password=dict(type='str', no_log=True),
