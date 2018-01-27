@@ -1,0 +1,20 @@
+---
+
+- name: playbook testing
+  connection: local
+  gather_facts: false
+  hosts: candid
+
+
+  tasks:
+     - name: create a fabric
+       candidlib:
+           host: "{{ host }}"
+           username: "{{ user }}"
+           password: "{{ pass }}"
+           unique_name: test
+           method: start-analysis
+           use_ssl: false
+           validate_certs: false
+
+

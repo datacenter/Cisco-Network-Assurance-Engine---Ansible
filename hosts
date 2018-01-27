@@ -1,0 +1,8 @@
+
+candid
+
+[all:vars]
+ansible_python_interpreter="python"
+host = 192.168.130.21
+user = 'admin'
+pass = 'Cisco!123'
